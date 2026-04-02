@@ -64,12 +64,34 @@ fn is_conversational(lower: &str, word_count: usize) -> bool {
         .trim_matches(|c: char| !c.is_alphanumeric() && c != ' ')
         .trim();
     let responses = [
+        // English
         "yes", "no", "yeah", "nah", "yep", "nope", "ok", "okay", "sure",
         "thanks", "thank you", "looks good", "lgtm", "go ahead", "do it",
         "perfect", "great", "nice", "cool", "got it", "understood",
         "correct", "exactly", "right", "agreed", "approve", "deny",
         "y", "n", "please", "sorry", "what", "help", "why", "how",
-        "works", "working", "done", "nope", "yup",
+        "works", "working", "done", "yup",
+        // Portuguese
+        "sim", "nao", "obrigado", "obrigada", "valeu", "beleza", "blz",
+        "certo", "correto", "isso", "exato", "pode", "bom", "boa",
+        "tranquilo", "perfeito", "pronto", "feito", "por favor",
+        // Spanish
+        "si", "no", "gracias", "vale", "dale", "bueno", "bien",
+        "correcto", "exacto", "claro", "listo", "hecho", "por favor",
+        "perfecto", "genial", "entendido",
+        // French
+        "oui", "non", "merci", "parfait", "bien", "bon", "exact",
+        "compris", "entendu", "correct", "fait",
+        // German
+        "ja", "nein", "danke", "gut", "richtig", "genau", "fertig",
+        "verstanden", "perfekt", "bitte",
+        // Italian
+        "si", "no", "grazie", "perfetto", "bene", "fatto", "esatto",
+        "capito", "corretto",
+        // Japanese (romanized)
+        "hai", "iie", "arigatou", "ok", "ii",
+        // Chinese (pinyin)
+        "hao", "dui", "xie xie", "keyi", "hao de",
     ];
     responses.iter().any(|r| normalized == *r)
 }
@@ -80,11 +102,31 @@ fn is_clear_command(lower: &str, word_count: usize) -> bool {
         return false;
     }
     let command_verbs = [
+        // English
         "run", "test", "commit", "push", "pull", "format", "lint", "build", "deploy", "install",
         "update", "create", "delete", "remove", "add", "show", "list", "explain", "refactor",
         "rename", "move", "copy", "merge", "rebase", "checkout", "reset", "revert", "log",
         "diff", "search", "find", "replace", "open", "close", "start", "stop", "check",
         "clean", "setup", "init", "generate", "migrate", "rollback", "undo",
+        // Portuguese
+        "roda", "rode", "rodar", "testa", "teste", "testar", "comita", "commita",
+        "puxa", "puxar", "formata", "formatar", "compila", "compilar", "instala", "instalar",
+        "atualiza", "atualizar", "cria", "criar", "deleta", "deletar", "remove", "remover",
+        "adiciona", "adicionar", "mostra", "mostrar", "lista", "listar", "explica", "explicar",
+        "refatora", "refatorar", "renomeia", "renomear", "abre", "abrir", "fecha", "fechar",
+        "limpa", "limpar", "gera", "gerar", "migra", "migrar",
+        // Spanish
+        "ejecuta", "ejecutar", "prueba", "probar", "compila", "compilar", "instala", "instalar",
+        "actualiza", "actualizar", "crea", "crear", "elimina", "eliminar", "muestra", "mostrar",
+        "busca", "buscar", "explica", "explicar", "abre", "abrir", "cierra", "cerrar",
+        "genera", "generar", "migra", "migrar",
+        // French
+        "lance", "lancer", "teste", "tester", "compile", "compiler", "installe", "installer",
+        "cree", "creer", "supprime", "supprimer", "montre", "montrer", "cherche", "chercher",
+        "explique", "expliquer", "ouvre", "ouvrir", "ferme", "fermer", "genere", "generer",
+        // German
+        "starte", "starten", "teste", "testen", "baue", "bauen", "installiere", "installieren",
+        "erstelle", "erstellen", "zeige", "zeigen", "suche", "suchen", "oeffne", "oeffnen",
     ];
     let first_word = lower.split_whitespace().next().unwrap_or("");
     command_verbs.contains(&first_word)
