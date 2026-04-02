@@ -51,8 +51,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Prompt is vague — expand it and inject as context
     let cwd = json["cwd"].as_str().unwrap_or(".");
+    let transcript_path = json["transcript_path"].as_str();
 
-    let expanded = match rewrite::rewrite(prompt, cwd) {
+    let expanded = match rewrite::rewrite(prompt, cwd, transcript_path) {
         Ok(rewrite) => rewrite,
         Err(_) => {
             // Can't reach Claude for rewrite, let the prompt through as-is

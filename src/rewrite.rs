@@ -6,14 +6,17 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Call Claude CLI to rewrite a vague prompt into a more effective one.
 /// Times out after 10 seconds, returning an error.
-pub fn rewrite(prompt: &str, cwd: &str) -> Result<String, String> {
+pub fn rewrite(prompt: &str, cwd: &str, transcript_path: Option<&str>) -> Result<String, String> {
     let prompt = prompt.to_string();
     let cwd = cwd.to_string();
+    let context = transcript_path
+        .map(|p| read_recent_context(p))
+        .unwrap_or_default();
 
     let (tx, rx) = mpsc::channel();
 
     std::thread::spawn(move || {
-        let result = call_claude(&prompt, &cwd);
+        let result = call_claude(&prompt, &cwd, &context);
         let _ = tx.send(result);
     });
 
@@ -23,18 +26,93 @@ pub fn rewrite(prompt: &str, cwd: &str) -> Result<String, String> {
     }
 }
 
-fn call_claude(prompt: &str, cwd: &str) -> Result<String, String> {
+/// Read the last few human/assistant exchanges from the transcript for context.
+fn read_recent_context(path: &str) -> String {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+
+    let mut exchanges: Vec<String> = Vec::new();
+
+    for line in content.lines().rev() {
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+
+        let msg_type = json["type"].as_str().unwrap_or("");
+        if msg_type != "human" && msg_type != "assistant" {
+            continue;
+        }
+
+        let role = if msg_type == "human" { "User" } else { "Assistant" };
+        let message = &json["message"];
+        let content = &message["content"];
+
+        let text = if let Some(s) = content.as_str() {
+            s.to_string()
+        } else if let Some(arr) = content.as_array() {
+            arr.iter()
+                .filter_map(|b| {
+                    if b["type"].as_str() == Some("text") {
+                        b["text"].as_str().map(|t| t.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            continue;
+        };
+
+        if text.trim().is_empty() {
+            continue;
+        }
+
+        // Truncate long messages to keep Haiku's input lean
+        let truncated = if text.len() > 300 {
+            format!("{}...", &text[..300])
+        } else {
+            text
+        };
+
+        exchanges.push(format!("{role}: {truncated}"));
+
+        // Last 6 messages is enough context
+        if exchanges.len() >= 6 {
+            break;
+        }
+    }
+
+    exchanges.reverse();
+    exchanges.join("\n\n")
+}
+
+fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<String, String> {
+    let context_section = if conversation_context.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "Recent conversation for context:\n\
+             ---\n\
+             {conversation_context}\n\
+             ---\n\n"
+        )
+    };
+
     let instruction = format!(
         "You are a prompt refinement tool. The user submitted a vague prompt while coding in: {cwd}\n\n\
+         {context_section}\
          Expand their prompt into a detailed interpretation that an AI coding assistant can act on. \
-         Infer what they likely need from context clues.\n\n\
+         Use the conversation context to understand what they're referring to.\n\n\
          Rules:\n\
          - Output ONLY the expanded interpretation, nothing else\n\
          - Respond in the SAME LANGUAGE as the original prompt\n\
-         - Be specific: infer likely files, components, or areas of concern from the project path\n\
-         - If it's about a bug, frame it as a debugging request with likely areas to investigate\n\
-         - If it's about a feature, frame it as a scoped implementation request\n\
-         - Don't use [brackets] or placeholders — make your best guess at what they mean\n\
+         - Use the conversation history to ground your interpretation in what was actually being discussed\n\
+         - If it's about a bug, reference the specific bug/file/component from the conversation\n\
+         - If it's about a feature, reference the specific feature being worked on\n\
+         - Don't use [brackets] or placeholders — make your best guess based on context\n\
          - Keep the user's tone and energy\n\n\
          Original prompt: {prompt}"
     );
