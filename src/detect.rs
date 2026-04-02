@@ -18,11 +18,6 @@ pub fn analyze(prompt: &str) -> Detection {
         return Detection { is_vague: false, score: 0 };
     }
 
-    // Exempt: clear commands ("run tests", "commit this", etc.)
-    if is_clear_command(&lower, word_count) {
-        return Detection { is_vague: false, score: -1 };
-    }
-
     // Exempt: long prompts — effort was made
     if word_count > 25 {
         return Detection { is_vague: false, score: -2 };
@@ -42,6 +37,17 @@ pub fn analyze(prompt: &str) -> Detection {
     }
     if has_technical_nouns(&lower) {
         specificity += 2;
+    }
+
+    // Commands with specificity are fine ("add rate limiting to the endpoint")
+    // Commands without specificity are vague ("add ui", "fix it")
+    if is_clear_command(&lower, word_count) && specificity > 0 {
+        return Detection { is_vague: false, score: -1 };
+    }
+
+    // Self-contained commands that don't need more detail
+    if is_self_contained_command(&lower) {
+        return Detection { is_vague: false, score: -1 };
     }
 
     // Short + no specificity = vague
@@ -130,6 +136,38 @@ fn is_clear_command(lower: &str, word_count: usize) -> bool {
     ];
     let first_word = lower.split_whitespace().next().unwrap_or("");
     command_verbs.contains(&first_word)
+}
+
+/// Commands that are complete on their own and don't need a specific target.
+fn is_self_contained_command(lower: &str) -> bool {
+    let phrases = [
+        // English
+        "run the tests", "run tests", "run test", "run the test suite",
+        "commit this", "commit these changes", "commit the changes",
+        "push this", "push the changes", "push it",
+        "build the project", "build this", "build it",
+        "format this", "format this file", "format the file", "format the code",
+        "lint this", "lint the code",
+        "deploy this", "deploy it",
+        "revert this", "undo this", "undo that",
+        "clean up", "clean this up",
+        // Portuguese
+        "roda os testes", "roda o teste", "rodar os testes",
+        "comita isso", "commita isso", "faz o commit",
+        "compila o projeto", "compila isso",
+        "formata isso", "formata o arquivo",
+        "limpa isso",
+        // Spanish
+        "ejecuta los tests", "ejecuta las pruebas",
+        "compila el proyecto", "compila esto",
+        "formatea esto",
+        // French
+        "lance les tests", "compile le projet",
+        "formate le fichier",
+        // German
+        "starte die tests", "baue das projekt",
+    ];
+    phrases.iter().any(|p| lower.starts_with(p))
 }
 
 fn has_file_paths(prompt: &str) -> bool {
@@ -250,6 +288,18 @@ mod tests {
         assert!(!analyze("explain how the auth middleware works").is_vague);
         assert!(!analyze("build the project").is_vague);
         assert!(!analyze("check src/main.rs").is_vague);
+        // Commands with specific targets
+        assert!(!analyze("add rate limiting to the /api/users endpoint").is_vague);
+        assert!(!analyze("delete the old migration files in src/db").is_vague);
+    }
+
+    #[test]
+    fn flags_vague_commands() {
+        assert!(analyze("add ui").is_vague);
+        assert!(analyze("fix it").is_vague);
+        assert!(analyze("create the thing").is_vague);
+        assert!(analyze("update the stuff").is_vague);
+        assert!(analyze("adiciona ui").is_vague);
     }
 
     #[test]
