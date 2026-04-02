@@ -113,7 +113,8 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
          - If it's about a bug, reference the specific bug/file/component from the conversation\n\
          - If it's about a feature, reference the specific feature being worked on\n\
          - Don't use [brackets] or placeholders — make your best guess based on context\n\
-         - Keep the user's tone and energy\n\n\
+         - Keep the user's tone and energy\n\
+         - Keep it to 1-2 sentences max. Be dense, not verbose.\n\n\
          Original prompt: {prompt}"
     );
 
