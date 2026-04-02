@@ -17,6 +17,20 @@ fn hook_command() -> Result<String, String> {
     Ok(format!("{} --hook", binary_path()?))
 }
 
+fn has_pt_hook(entry: &serde_json::Value) -> bool {
+    // Check inside the hooks array of a matcher entry
+    entry
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .is_some_and(|hooks| {
+            hooks.iter().any(|h| {
+                h.get("command")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|c| c.contains("pt") && c.contains("--hook"))
+            })
+        })
+}
+
 pub fn setup() -> Result<(), Box<dyn std::error::Error>> {
     let path = settings_path();
     let command = hook_command()?;
@@ -30,25 +44,26 @@ pub fn setup() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Check if hook is already registered
-    if let Some(hooks) = settings.get("hooks")
+    if let Some(entries) = settings
+        .get("hooks")
         .and_then(|h| h.get("UserPromptSubmit"))
         .and_then(|u| u.as_array())
     {
-        let already_registered = hooks.iter().any(|h| {
-            h.get("command")
-                .and_then(|c| c.as_str())
-                .is_some_and(|c| c.contains("pt") && c.contains("--hook"))
-        });
-        if already_registered {
+        if entries.iter().any(has_pt_hook) {
             eprintln!("Prompt Tuner is already registered.");
             return Ok(());
         }
     }
 
-    // Build the hook entry
+    // Build the hook entry with matcher + hooks array
     let hook_entry = serde_json::json!({
-        "type": "command",
-        "command": command
+        "matcher": "",
+        "hooks": [
+            {
+                "type": "command",
+                "command": command
+            }
+        ]
     });
 
     // Merge into settings
@@ -95,19 +110,15 @@ pub fn uninstall() -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(&path)?;
     let mut settings: serde_json::Value = serde_json::from_str(&content)?;
 
-    // Find and remove pt hooks
-    let removed = if let Some(hooks) = settings
+    // Find and remove pt hook entries
+    let removed = if let Some(entries) = settings
         .get_mut("hooks")
         .and_then(|h| h.get_mut("UserPromptSubmit"))
         .and_then(|u| u.as_array_mut())
     {
-        let before = hooks.len();
-        hooks.retain(|h| {
-            !h.get("command")
-                .and_then(|c| c.as_str())
-                .is_some_and(|c| c.contains("pt") && c.contains("--hook"))
-        });
-        before - hooks.len()
+        let before = entries.len();
+        entries.retain(|entry| !has_pt_hook(entry));
+        before - entries.len()
     } else {
         0
     };
