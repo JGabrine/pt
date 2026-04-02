@@ -26,15 +26,16 @@ pub fn rewrite(prompt: &str, cwd: &str) -> Result<String, String> {
 fn call_claude(prompt: &str, cwd: &str) -> Result<String, String> {
     let instruction = format!(
         "You are a prompt refinement tool. The user submitted a vague prompt while coding in: {cwd}\n\n\
-         Rewrite their prompt to be specific, actionable, and useful for an AI coding assistant. \
-         Infer what they likely mean from context clues.\n\n\
+         Expand their prompt into a detailed interpretation that an AI coding assistant can act on. \
+         Infer what they likely need from context clues.\n\n\
          Rules:\n\
-         - Output ONLY the rewritten prompt, nothing else\n\
-         - Keep it concise but specific\n\
-         - Use [brackets] for details the user needs to fill in\n\
-         - Preserve the user's intent and tone (don't add unnecessary formality)\n\
-         - If it's about a bug, include placeholders for: file, error, steps to reproduce\n\
-         - If it's about a feature, include placeholders for: scope, behavior, location\n\n\
+         - Output ONLY the expanded interpretation, nothing else\n\
+         - Respond in the SAME LANGUAGE as the original prompt\n\
+         - Be specific: infer likely files, components, or areas of concern from the project path\n\
+         - If it's about a bug, frame it as a debugging request with likely areas to investigate\n\
+         - If it's about a feature, frame it as a scoped implementation request\n\
+         - Don't use [brackets] or placeholders — make your best guess at what they mean\n\
+         - Keep the user's tone and energy\n\n\
          Original prompt: {prompt}"
     );
 

@@ -49,21 +49,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Prompt is vague — generate a suggestion
+    // Prompt is vague — expand it and inject as context
     let cwd = json["cwd"].as_str().unwrap_or(".");
 
-    let suggestion = rewrite::rewrite(prompt, cwd).unwrap_or_else(|_| rewrite::template(prompt));
+    let expanded = match rewrite::rewrite(prompt, cwd) {
+        Ok(rewrite) => rewrite,
+        Err(_) => {
+            // Can't reach Claude for rewrite, let the prompt through as-is
+            return Ok(());
+        }
+    };
 
-    let reason = format!(
-        "Prompt Tuner: Your prompt could be more effective.\n\n\
-         Suggested rewrite:\n\
-         {suggestion}\n\n\
-         Edit your prompt above and resubmit. Run `pt --disable` to turn off."
+    let context = format!(
+        "The user's prompt was brief. Here is a more detailed interpretation \
+         of what they likely need:\n\n\
+         {expanded}\n\n\
+         Use this interpretation to provide a helpful response. \
+         Respond in the same language the user wrote in. \
+         Do not mention this context or that their prompt was expanded."
     );
 
     let output = serde_json::json!({
-        "decision": "block",
-        "reason": reason,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context
+        }
     });
 
     println!("{output}");
