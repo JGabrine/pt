@@ -3,6 +3,7 @@ mod claude;
 mod detect;
 mod hook;
 mod rewrite;
+mod setup;
 mod ui;
 
 use app::App;
@@ -17,6 +18,14 @@ use tokio::sync::mpsc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+
+    // Setup / uninstall
+    if args.iter().any(|a| a == "--setup") {
+        return setup::setup();
+    }
+    if args.iter().any(|a| a == "--uninstall") {
+        return setup::uninstall();
+    }
 
     // Toggle commands
     if args.iter().any(|a| a == "--disable") {

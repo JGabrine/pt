@@ -12,28 +12,20 @@ Specific prompts, commands, and conversational responses pass through with zero 
 
 ## Install
 
+One-liner:
+
 ```sh
-cargo build --release
+curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh
+```
+
+Or manually:
+
+```sh
+cargo install --git https://github.com/JGabrine/pt
+pt --setup
 ```
 
 Requires [Claude Code CLI](https://docs.anthropic.com/claude-code) installed and authenticated.
-
-## Setup
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "type": "command",
-        "command": "/absolute/path/to/pt --hook"
-      }
-    ]
-  }
-}
-```
 
 ## Usage
 
@@ -41,6 +33,8 @@ Add to `~/.claude/settings.json`:
 pt --test "your prompt"   # Test detection without the hook
 pt --disable              # Turn off until re-enabled
 pt --enable               # Turn back on
+pt --setup                # Register hook in Claude Code settings
+pt --uninstall            # Remove hook from Claude Code settings
 pt                        # TUI mode (standalone interactive refinement)
 ```
 
