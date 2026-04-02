@@ -30,7 +30,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut input = String::new();
-    std::io::stdin().read_to_string(&mut input)?;
+    std::io::stdin()
+        .take(1_000_000)
+        .read_to_string(&mut input)?;
 
     let json: serde_json::Value =
         serde_json::from_str(&input).map_err(|e| format!("Failed to parse hook input: {e}"))?;
