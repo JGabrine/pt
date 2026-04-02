@@ -39,7 +39,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let prompt = json["prompt"].as_str().unwrap_or("");
 
-    if prompt.is_empty() {
+    if prompt.is_empty() || prompt.trim_start().starts_with("pt ") {
         return Ok(());
     }
 
