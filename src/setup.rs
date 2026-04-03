@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 fn settings_path() -> PathBuf {
     dirs::home_dir()
@@ -132,5 +133,83 @@ pub fn uninstall() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&path, formatted)?;
 
     eprintln!("Prompt Tuner removed from {}", path.display());
+    Ok(())
+}
+
+fn install_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".local")
+        .join("share")
+        .join("pt")
+}
+
+fn bin_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".local")
+        .join("bin")
+        .join("pt")
+}
+
+pub fn update() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = install_dir();
+
+    // If installed via install.sh, repo lives at ~/.local/share/pt
+    // Otherwise, try updating from wherever the binary is running
+    let repo_dir = if dir.join(".git").exists() {
+        dir.clone()
+    } else {
+        // Try the directory the binary lives in, walk up to find a git repo
+        let exe = std::env::current_exe()?;
+        let mut search = exe.parent().map(|p| p.to_path_buf());
+        loop {
+            match search {
+                Some(ref p) if p.join(".git").exists() => break p.clone(),
+                Some(ref p) => search = p.parent().map(|p| p.to_path_buf()),
+                None => {
+                    eprintln!("Could not find pt repository. Reinstall with:");
+                    eprintln!("  curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh");
+                    return Ok(());
+                }
+            }
+        }
+    };
+
+    eprintln!("Updating from {}...", repo_dir.display());
+
+    // Pull latest
+    let pull = Command::new("git")
+        .arg("-C")
+        .arg(&repo_dir)
+        .args(["pull", "--ff-only"])
+        .status()?;
+
+    if !pull.success() {
+        return Err("git pull failed".into());
+    }
+
+    // Rebuild
+    eprintln!("Building...");
+    let build = Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .arg("--manifest-path")
+        .arg(repo_dir.join("Cargo.toml"))
+        .status()?;
+
+    if !build.success() {
+        return Err("cargo build failed".into());
+    }
+
+    // Copy binary if installed to ~/.local/bin
+    let built = repo_dir.join("target").join("release").join("pt");
+    let dest = bin_path();
+    if dest.exists() && dest != built {
+        std::fs::copy(&built, &dest)?;
+        eprintln!("Updated binary at {}", dest.display());
+    }
+
+    eprintln!("Done.");
     Ok(())
 }

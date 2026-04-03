@@ -26,6 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|a| a == "--uninstall") {
         return setup::uninstall();
     }
+    if args.iter().any(|a| a == "--update") {
+        return setup::update();
+    }
 
     // Toggle commands
     if args.iter().any(|a| a == "--disable") {

@@ -35,6 +35,7 @@ pt --disable              # Turn off until re-enabled
 pt --enable               # Turn back on
 pt --setup                # Register hook in Claude Code settings
 pt --uninstall            # Remove hook from Claude Code settings
+pt --update               # Pull latest and rebuild
 pt                        # TUI mode (standalone interactive refinement)
 ```
 
