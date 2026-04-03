@@ -58,6 +58,14 @@ pt --update               # Pull latest and rebuild
 pt                        # TUI mode (standalone interactive refinement)
 ```
 
+These commands can be run mid-conversation inside Claude Code by prefixing with `!`:
+
+```
+! pt --disable
+```
+
+Takes effect on the very next prompt.
+
 ## Examples
 
 ```
