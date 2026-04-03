@@ -161,10 +161,11 @@ fn call_claude(
     let instruction = format!(
         "You are a prompt refinement tool. The user submitted a vague prompt while coding in: {cwd}\n\n\
          {context_section}\
-         Expand their prompt into a detailed interpretation that an AI coding assistant can act on. \
+         Rewrite their prompt as if the user themselves wrote it with more detail. \
          Use the conversation context to understand what they're referring to.\n\n\
          Rules:\n\
-         - Output ONLY the expanded interpretation, nothing else\n\
+         - Output ONLY the rewritten prompt, nothing else\n\
+         - Write in FIRST PERSON as the user, not about the user (use \"I\", \"my\", not \"the user\", \"they\")\n\
          - Respond in the SAME LANGUAGE as the original prompt\n\
          - Use the conversation history to ground your interpretation in what was actually being discussed\n\
          - If it's about a bug, reference the specific bug/file/component from the conversation\n\
