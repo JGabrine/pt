@@ -4,6 +4,8 @@
 
 A Claude Code hook that catches vague prompts and suggests better versions before they waste cycles.
 
+> **Note:** This is a personal tool made public for convenience. No support, issues, or PRs will be handled beyond what's in this README. Use at your own risk — the author takes no responsibility for how this tool may affect, alter, or increase your Claude API usage or costs.
+
 ## How it works
 
 PT runs as a `UserPromptSubmit` hook. Every prompt goes through a fast heuristic check (no API calls). If the prompt lacks actionable content — no file paths, no code references, no error messages, no technical detail — it blocks the submission and suggests a rewrite using Haiku.
