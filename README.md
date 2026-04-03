@@ -31,7 +31,7 @@ Specific prompts, commands, and conversational responses pass through with zero 
 curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell):** ⚠️ *Windows support is still in development. Use at your own risk.*
 
 ```powershell
 irm https://raw.githubusercontent.com/JGabrine/pt/main/install.ps1 | iex
