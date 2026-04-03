@@ -178,6 +178,18 @@ pub fn update() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Updating from {}...", repo_dir.display());
 
+    // Snapshot current HEAD before pulling
+    let old_head = Command::new("git")
+        .arg("-C")
+        .arg(&repo_dir)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
     // Pull latest
     let pull = Command::new("git")
         .arg("-C")
@@ -188,6 +200,33 @@ pub fn update() -> Result<(), Box<dyn std::error::Error>> {
     if !pull.success() {
         return Err("git pull failed".into());
     }
+
+    // Show what changed
+    let new_head = Command::new("git")
+        .arg("-C")
+        .arg(&repo_dir)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    if old_head == new_head {
+        eprintln!("Already up to date.");
+        return Ok(());
+    }
+
+    // Print changelog
+    let range = format!("{old_head}..{new_head}");
+    eprintln!("\nChanges:");
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(&repo_dir)
+        .args(["log", "--oneline", &range])
+        .status();
+    eprintln!();
 
     // Rebuild
     eprintln!("Building...");
