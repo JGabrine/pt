@@ -67,9 +67,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
          {expanded}\n\n\
          Use this interpretation to provide a helpful response. \
          Respond in the same language the user wrote in. \
-         IMPORTANT: Start your response with exactly this line, in italics:\n\
-         *[Prompt Tuner: {expanded}]*\n\
-         Then continue with your normal response below it."
+         IMPORTANT: Start your response with exactly these lines as a blockquote, \
+         followed by a horizontal rule to visually separate it from your response:\n\
+         > **Prompt Tuner:** {expanded}\n\
+         \n---\n\n\
+         Then continue with your normal response below the rule."
     );
 
     let output = serde_json::json!({
