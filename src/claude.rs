@@ -62,7 +62,10 @@ pub async fn run_claude(input: &str, mode: Mode, tx: mpsc::UnboundedSender<Messa
         }
     };
 
-    let stdout = child.stdout.take().unwrap();
+    let Some(stdout) = child.stdout.take() else {
+        let _ = tx.send(Message::Error("Failed to capture Claude stdout".to_string()));
+        return;
+    };
     let reader = tokio::io::BufReader::new(stdout);
     let mut lines = reader.lines();
     let mut got_output = false;

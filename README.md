@@ -4,7 +4,13 @@
 
 A Claude Code hook that catches vague prompts and suggests better versions before they waste cycles.
 
-> **Note:** This is a personal tool made public for convenience. No support, issues, or PRs will be handled beyond what's in this README. Use at your own risk — the author takes no responsibility for how this tool may affect, alter, or increase your Claude API usage or costs.
+> **Disclaimer:** This is a personal tool made public for convenience. No support, issues, or PRs will be handled beyond what's in this README.
+>
+> - The author takes **no responsibility** for how this tool is used, how it may affect or alter Claude's behavior, or any API costs incurred by its operation.
+> - **Data sent to Claude:** When a vague prompt is detected, your prompt text, current working directory path, and recent conversation history are sent to Claude Haiku for rewrite suggestions. Be aware of this if you work with sensitive or proprietary code.
+> - **Cost:** Each vague prompt triggers a Haiku API call billed to your Anthropic account. Calls are small but not free.
+> - **Failure behavior:** If Claude CLI is unavailable or the rewrite times out (15s), the prompt passes through unmodified.
+> - By installing this tool, you accept full responsibility for its effects on your workflow, API usage, and costs.
 
 ## How it works
 
@@ -14,7 +20,6 @@ Specific prompts, commands, and conversational responses pass through with zero 
 
 ## Before you install
 
-- **API costs:** When PT blocks a vague prompt, it calls Claude Haiku (with Sonnet fallback) to generate a rewrite suggestion. These are billed to your Anthropic account. The calls are small and infrequent, but they are not free.
 - **What it modifies:** `--setup` writes to `~/.claude/settings.json` and copies the binary to `~/.local/bin/pt` (Linux/macOS) or `%LOCALAPPDATA%\pt\` (Windows). It does not modify any other files.
 - **Requires:** [Rust toolchain](https://rustup.rs) (to build) and [Claude Code CLI](https://docs.anthropic.com/claude-code) (installed and authenticated).
 

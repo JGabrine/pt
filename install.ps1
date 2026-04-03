@@ -22,8 +22,8 @@ if (Test-Path "$InstallDir\.git") {
     git -C $InstallDir pull --ff-only
 } else {
     if (Test-Path $InstallDir) {
-        # Directory exists but isn't a repo — remove and re-clone
-        Remove-Item -Recurse -Force $InstallDir
+        Write-Host "Error: $InstallDir exists but is not a pt repo. Remove it manually if safe, then retry." -ForegroundColor Red
+        exit 1
     }
     Write-Host "Cloning repository..."
     git clone $Repo $InstallDir

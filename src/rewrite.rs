@@ -15,23 +15,75 @@ pub fn rewrite(prompt: &str, cwd: &str, transcript_path: Option<&str>) -> Result
 
     let (tx, rx) = mpsc::channel();
 
+    // Track the child PID so we can kill it on timeout
+    let pid = std::sync::Arc::new(std::sync::Mutex::new(None::<u32>));
+    let pid_clone = pid.clone();
+
     std::thread::spawn(move || {
-        let result = call_claude(&prompt, &cwd, &context);
+        let result = call_claude(&prompt, &cwd, &context, &pid_clone);
         let _ = tx.send(result);
     });
 
     match rx.recv_timeout(TIMEOUT) {
         Ok(result) => result,
-        Err(_) => Err("Rewrite timed out".to_string()),
+        Err(_) => {
+            // Kill the child process if still running
+            if let Some(child_pid) = pid.lock().ok().and_then(|g| *g) {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(child_pid as i32, libc::SIGKILL);
+                }
+                #[cfg(windows)]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(["/F", "/PID", &child_pid.to_string()])
+                        .output();
+                }
+            }
+            Err("Rewrite timed out".to_string())
+        }
     }
 }
 
 /// Read the last few human/assistant exchanges from the transcript for context.
 fn read_recent_context(path: &str) -> String {
+    // Only read transcripts from Claude Code's data directory
+    let path_buf = std::path::Path::new(path);
+    if let Some(home) = dirs::home_dir() {
+        let claude_dir = home.join(".claude");
+        if !path_buf.starts_with(&claude_dir) {
+            return String::new();
+        }
+    }
+
+    // Cap reads at 10 MB to avoid OOM on huge transcripts
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return String::new(),
+    };
+    if meta.len() > 10 * 1024 * 1024 {
+        // Read only the last 1 MB for recent context
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = match std::fs::File::open(path) {
+            Ok(f) => f,
+            Err(_) => return String::new(),
+        };
+        let start = meta.len().saturating_sub(1024 * 1024);
+        let _ = file.seek(SeekFrom::Start(start));
+        let mut content = String::new();
+        let _ = file.read_to_string(&mut content);
+        return parse_exchanges(&content);
+    }
+
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return String::new(),
     };
+
+    parse_exchanges(&content)
+}
+
+fn parse_exchanges(content: &str) -> String {
 
     let mut exchanges: Vec<String> = Vec::new();
 
@@ -89,7 +141,12 @@ fn read_recent_context(path: &str) -> String {
     exchanges.join("\n\n")
 }
 
-fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<String, String> {
+fn call_claude(
+    prompt: &str,
+    cwd: &str,
+    conversation_context: &str,
+    pid: &std::sync::Mutex<Option<u32>>,
+) -> Result<String, String> {
     let context_section = if conversation_context.is_empty() {
         String::new()
     } else {
@@ -121,7 +178,7 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
          Original prompt: {prompt}"
     );
 
-    let output = Command::new("claude")
+    let child = Command::new("claude")
         .arg("-p")
         .arg("--model")
         .arg("haiku")
@@ -129,7 +186,9 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
         .arg("sonnet")
         .arg(&instruction)
         .stdin(std::process::Stdio::null())
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 "Claude CLI not found".to_string()
@@ -137,6 +196,15 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
                 format!("Failed to run claude: {e}")
             }
         })?;
+
+    // Store PID so parent can kill on timeout
+    if let Ok(mut guard) = pid.lock() {
+        *guard = Some(child.id());
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for claude: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -151,35 +219,3 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
     Ok(result)
 }
 
-/// Generate a static template when the API rewrite isn't available.
-pub fn template(prompt: &str) -> String {
-    let lower = prompt.to_lowercase();
-
-    if lower.contains("bug")
-        || lower.contains("broken")
-        || lower.contains("error")
-        || lower.contains("fail")
-        || lower.contains("wrong")
-        || lower.contains("not working")
-        || lower.contains("doesn't work")
-    {
-        "The [specific bug/error] in [file/component] is still occurring. \
-         Error message: [paste error]. Steps to reproduce: [steps]. \
-         Previous fix attempt: [what was tried]. Expected: [expected behavior]."
-            .to_string()
-    } else if lower.contains("add")
-        || lower.contains("feature")
-        || lower.contains("implement")
-        || lower.contains("create")
-        || lower.contains("build")
-    {
-        "Add [feature name] to [file/component]. It should [describe behavior]. \
-         Requirements: [list requirements]. Similar to [reference if any]."
-            .to_string()
-    } else {
-        "I need help with [specific task] in [file/component]. \
-         Context: [what you're working on]. Current state: [what's happening]. \
-         Goal: [what you want to achieve]."
-            .to_string()
-    }
-}
