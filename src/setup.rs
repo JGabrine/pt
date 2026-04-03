@@ -8,14 +8,38 @@ fn settings_path() -> PathBuf {
         .join("settings.json")
 }
 
-fn binary_path() -> Result<String, String> {
-    std::env::current_exe()
-        .map(|p| p.to_string_lossy().to_string())
-        .map_err(|e| format!("Could not determine binary path: {e}"))
+/// Ensure the binary lives at ~/.local/bin/pt so the hook survives
+/// even if the original build directory is deleted.
+fn ensure_stable_binary() -> Result<String, String> {
+    let stable = bin_path();
+    let current = std::env::current_exe()
+        .map_err(|e| format!("Could not determine binary path: {e}"))?;
+
+    // Already running from the stable location
+    if current == stable {
+        return Ok(stable.to_string_lossy().to_string());
+    }
+
+    // Copy ourselves to ~/.local/bin/pt
+    if let Some(parent) = stable.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create {}: {e}", parent.display()))?;
+    }
+    std::fs::copy(&current, &stable)
+        .map_err(|e| format!("Could not copy binary to {}: {e}", stable.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&stable, std::fs::Permissions::from_mode(0o755));
+    }
+
+    eprintln!("Installed binary to {}", stable.display());
+    Ok(stable.to_string_lossy().to_string())
 }
 
 fn hook_command() -> Result<String, String> {
-    Ok(format!("{} --hook", binary_path()?))
+    Ok(format!("{} --hook", ensure_stable_binary()?))
 }
 
 fn has_pt_hook(entry: &serde_json::Value) -> bool {
@@ -44,16 +68,13 @@ pub fn setup() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::json!({})
     };
 
-    // Check if hook is already registered
+    // Remove any existing PT hook entries (may have stale paths)
     if let Some(entries) = settings
-        .get("hooks")
-        .and_then(|h| h.get("UserPromptSubmit"))
-        .and_then(|u| u.as_array())
+        .get_mut("hooks")
+        .and_then(|h| h.get_mut("UserPromptSubmit"))
+        .and_then(|u| u.as_array_mut())
     {
-        if entries.iter().any(has_pt_hook) {
-            eprintln!("Prompt Tuner is already registered.");
-            return Ok(());
-        }
+        entries.retain(|entry| !has_pt_hook(entry));
     }
 
     // Build the hook entry with matcher + hooks array
@@ -137,19 +158,33 @@ pub fn uninstall() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn install_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".local")
-        .join("share")
-        .join("pt")
+    if cfg!(windows) {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("pt")
+    } else {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".local")
+            .join("share")
+            .join("pt")
+    }
 }
 
 fn bin_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".local")
-        .join("bin")
-        .join("pt")
+    let bin_name = if cfg!(windows) { "pt.exe" } else { "pt" };
+    if cfg!(windows) {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("pt")
+            .join(bin_name)
+    } else {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".local")
+            .join("bin")
+            .join(bin_name)
+    }
 }
 
 pub fn update() -> Result<(), Box<dyn std::error::Error>> {
@@ -169,7 +204,11 @@ pub fn update() -> Result<(), Box<dyn std::error::Error>> {
                 Some(ref p) => search = p.parent().map(|p| p.to_path_buf()),
                 None => {
                     eprintln!("Could not find pt repository. Reinstall with:");
-                    eprintln!("  curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh");
+                    if cfg!(windows) {
+                        eprintln!("  irm https://raw.githubusercontent.com/JGabrine/pt/main/install.ps1 | iex");
+                    } else {
+                        eprintln!("  curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh");
+                    }
                     return Ok(());
                 }
             }
@@ -241,8 +280,9 @@ pub fn update() -> Result<(), Box<dyn std::error::Error>> {
         return Err("cargo build failed".into());
     }
 
-    // Copy binary if installed to ~/.local/bin
-    let built = repo_dir.join("target").join("release").join("pt");
+    // Copy binary to stable location
+    let bin_name = if cfg!(windows) { "pt.exe" } else { "pt" };
+    let built = repo_dir.join("target").join("release").join(bin_name);
     let dest = bin_path();
     if dest.exists() && dest != built {
         std::fs::copy(&built, &dest)?;
