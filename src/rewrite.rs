@@ -2,7 +2,7 @@ use std::process::Command;
 use std::sync::mpsc;
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Call Claude CLI to rewrite a vague prompt into a more effective one.
 /// Times out after 10 seconds, returning an error.
@@ -114,7 +114,10 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
          - If it's about a feature, reference the specific feature being worked on\n\
          - Don't use [brackets] or placeholders — make your best guess based on context\n\
          - Keep the user's tone and energy\n\
-         - Keep it to 1-2 sentences max. Be dense, not verbose.\n\n\
+         - Keep it to 1-2 sentences max. Be dense, not verbose.\n\
+         - ONLY if all of these are true: there is no conversation context, the prompt \
+         has zero clues about what the user wants, and you cannot make even a rough guess \
+         — then output exactly the word PUNT and nothing else. Otherwise, always expand.\n\n\
          Original prompt: {prompt}"
     );
 
@@ -125,6 +128,7 @@ fn call_claude(prompt: &str, cwd: &str, conversation_context: &str) -> Result<St
         .arg("--fallback-model")
         .arg("sonnet")
         .arg(&instruction)
+        .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {

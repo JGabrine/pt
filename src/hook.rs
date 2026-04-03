@@ -54,9 +54,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let transcript_path = json["transcript_path"].as_str();
 
     let expanded = match rewrite::rewrite(prompt, cwd, transcript_path) {
-        Ok(rewrite) => rewrite,
-        Err(_) => {
-            // Can't reach Claude for rewrite, let the prompt through as-is
+        Ok(rewrite) if rewrite.trim() != "PUNT" => rewrite,
+        _ => {
+            // Haiku can't determine intent or failed — let Opus handle it raw
             return Ok(());
         }
     };
