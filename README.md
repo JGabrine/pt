@@ -12,6 +12,12 @@ PT runs as a `UserPromptSubmit` hook. Every prompt goes through a fast heuristic
 
 Specific prompts, commands, and conversational responses pass through with zero overhead.
 
+## Before you install
+
+- **API costs:** When PT blocks a vague prompt, it calls Claude Haiku (with Sonnet fallback) to generate a rewrite suggestion. These are billed to your Anthropic account. The calls are small and infrequent, but they are not free.
+- **What it modifies:** `--setup` writes to `~/.claude/settings.json` and copies the binary to `~/.local/bin/pt` (Linux/macOS) or `%LOCALAPPDATA%\pt\` (Windows). It does not modify any other files.
+- **Requires:** [Rust toolchain](https://rustup.rs) (to build) and [Claude Code CLI](https://docs.anthropic.com/claude-code) (installed and authenticated).
+
 ## Install
 
 **Linux / macOS:**
@@ -71,6 +77,25 @@ Instead of pattern-matching vague phrases (infinite, language-dependent), PT det
 2. It contains nothing actionable (no file paths, code references, error messages, or technical nouns)
 
 Conversational responses and clear commands are always exempt.
+
+## Uninstall
+
+```sh
+pt --uninstall   # Remove hook from Claude Code settings
+```
+
+To fully remove the binary and repo:
+
+```sh
+# Linux / macOS
+rm ~/.local/bin/pt
+rm -rf ~/.local/share/pt
+```
+
+```powershell
+# Windows
+Remove-Item "$env:LOCALAPPDATA\pt" -Recurse -Force
+```
 
 ## License
 
