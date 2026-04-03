@@ -12,10 +12,16 @@ Specific prompts, commands, and conversational responses pass through with zero 
 
 ## Install
 
-One-liner:
+**Linux / macOS:**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/JGabrine/pt/main/install.ps1 | iex
 ```
 
 Or manually:
