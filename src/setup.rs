@@ -285,6 +285,9 @@ pub fn update() -> Result<(), Box<dyn std::error::Error>> {
     let built = repo_dir.join("target").join("release").join(bin_name);
     let dest = bin_path();
     if dest.exists() && dest != built {
+        // Remove first to avoid "Text file busy" — the running process keeps its
+        // file descriptor, but the path is freed for the new binary.
+        let _ = std::fs::remove_file(&dest);
         std::fs::copy(&built, &dest)?;
         eprintln!("Updated binary at {}", dest.display());
     }
