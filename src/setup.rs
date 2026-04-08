@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 fn settings_path() -> PathBuf {
     dirs::home_dir()
@@ -187,31 +188,113 @@ fn bin_path() -> PathBuf {
     }
 }
 
-pub fn update() -> Result<(), Box<dyn std::error::Error>> {
+/// Find the git repository containing PT's source code.
+pub fn find_repo_dir() -> Option<PathBuf> {
     let dir = install_dir();
+    if dir.join(".git").exists() {
+        return Some(dir);
+    }
 
-    // If installed via install.sh, repo lives at ~/.local/share/pt
-    // Otherwise, try updating from wherever the binary is running
-    let repo_dir = if dir.join(".git").exists() {
-        dir.clone()
-    } else {
-        // Try the directory the binary lives in, walk up to find a git repo
-        let exe = std::env::current_exe()?;
-        let mut search = exe.parent().map(|p| p.to_path_buf());
-        loop {
-            match search {
-                Some(ref p) if p.join(".git").exists() => break p.clone(),
-                Some(ref p) => search = p.parent().map(|p| p.to_path_buf()),
-                None => {
-                    eprintln!("Could not find pt repository. Reinstall with:");
-                    if cfg!(windows) {
-                        eprintln!("  irm https://raw.githubusercontent.com/JGabrine/pt/main/install.ps1 | iex");
-                    } else {
-                        eprintln!("  curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh");
-                    }
-                    return Ok(());
-                }
+    let exe = std::env::current_exe().ok()?;
+    let mut search = exe.parent().map(|p| p.to_path_buf());
+    loop {
+        match search {
+            Some(ref p) if p.join(".git").exists() => return Some(p.clone()),
+            Some(ref p) => search = p.parent().map(|p| p.to_path_buf()),
+            None => return None,
+        }
+    }
+}
+
+fn cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("/tmp"))
+                .join(".cache")
+        })
+        .join("pt")
+}
+
+fn read_cached_remote(path: &Path) -> Option<String> {
+    let age = std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()
+        .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())?;
+
+    if age > Duration::from_secs(4 * 3600) {
+        return None;
+    }
+
+    let content = std::fs::read_to_string(path).ok()?;
+    let trimmed = content.trim().to_string();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
+}
+
+/// Check if a newer version is available. Non-blocking: reads from cache
+/// and spawns a background refresh if stale.
+pub fn update_available() -> bool {
+    let repo = match find_repo_dir() {
+        Some(r) => r,
+        None => return false,
+    };
+
+    let local = Command::new("git")
+        .arg("-C").arg(&repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+
+    if local.is_empty() {
+        return false;
+    }
+
+    let cache = cache_dir();
+    let cache_file = cache.join("remote_head");
+
+    // Read cached remote HEAD (returns None if stale or missing)
+    let remote = read_cached_remote(&cache_file);
+
+    // Spawn background refresh if cache is stale
+    if remote.is_none() {
+        let _ = std::fs::create_dir_all(&cache);
+        #[cfg(unix)]
+        {
+            let cmd = format!(
+                "git -C '{}' ls-remote origin HEAD 2>/dev/null | cut -f1 > '{}'",
+                repo.display(),
+                cache_file.display()
+            );
+            let _ = Command::new("sh")
+                .args(["-c", &cmd])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+        }
+    }
+
+    match remote {
+        Some(ref r) => !r.is_empty() && *r != local,
+        None => false,
+    }
+}
+
+pub fn update() -> Result<(), Box<dyn std::error::Error>> {
+    let repo_dir = match find_repo_dir() {
+        Some(dir) => dir,
+        None => {
+            eprintln!("Could not find pt repository. Reinstall with:");
+            if cfg!(windows) {
+                eprintln!("  irm https://raw.githubusercontent.com/JGabrine/pt/main/install.ps1 | iex");
+            } else {
+                eprintln!("  curl -fsSL https://raw.githubusercontent.com/JGabrine/pt/main/install.sh | sh");
             }
+            return Ok(());
         }
     };
 

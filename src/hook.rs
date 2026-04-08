@@ -1,5 +1,6 @@
 use crate::detect;
 use crate::rewrite;
+use crate::setup;
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -23,10 +24,29 @@ pub fn enable() {
     eprintln!("Prompt Tuner enabled.");
 }
 
+fn should_notify_update() -> bool {
+    #[cfg(unix)]
+    {
+        let ppid = unsafe { libc::getppid() } as u32;
+        let marker = std::env::temp_dir().join(format!("pt_notified_{ppid}"));
+        if marker.exists() {
+            return false;
+        }
+        let _ = std::fs::write(&marker, "");
+        return setup::update_available();
+    }
+    #[allow(unreachable_code)]
+    false
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Check kill switch
     if lock_path().exists() {
         return Ok(());
+    }
+
+    if should_notify_update() {
+        eprintln!("\x1b[36mA new update is available. Run pt --update when you get a chance.\x1b[0m");
     }
 
     let mut input = String::new();
