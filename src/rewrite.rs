@@ -141,6 +141,84 @@ fn parse_exchanges(content: &str) -> String {
     exchanges.join("\n\n")
 }
 
+/// Detect the user's likely language from prompt text, conversation context, and system locale.
+fn detect_language(prompt: &str, context: &str) -> Option<&'static str> {
+    let text = format!("{context} {prompt}").to_lowercase();
+
+    // Portuguese signals — common short words unlikely in English
+    const PT: &[&str] = &[
+        "não", "isso", "esse", "essa", "isto", "este", "esta",
+        "também", "já", "aqui", "ainda", "agora", "então", "aí",
+        "fazer", "faz", "tem", "são", "vou", "pode", "está",
+        "preciso", "quero", "meu", "minha", "nosso",
+        "corrige", "corrigir", "arruma", "arrumar", "muda", "mudar",
+        "tira", "tirar", "coloca", "colocar", "olha", "ajusta",
+        "adiciona", "atualiza", "implementa", "refatora",
+        "nesse", "nessa", "neste", "nesta", "nisso",
+        "desse", "dessa", "depois", "antes", "porque",
+    ];
+
+    let pt_hits = PT
+        .iter()
+        .filter(|target| {
+            text.split_whitespace()
+                .any(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == **target)
+        })
+        .count();
+    let has_tilde = text.chars().any(|c| matches!(c, 'ã' | 'õ'));
+    let has_cedilla = text.contains('ç');
+
+    if pt_hits >= 2 || (pt_hits >= 1 && (has_tilde || has_cedilla)) || has_tilde {
+        return Some("Portuguese");
+    }
+
+    // Spanish signals
+    const ES: &[&str] = &[
+        "hacer", "necesito", "quiero", "donde", "esto", "muy", "pero",
+        "hay", "puede", "tiene", "estaba", "hola",
+    ];
+
+    let es_hits = ES
+        .iter()
+        .filter(|target| {
+            text.split_whitespace()
+                .any(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == **target)
+        })
+        .count();
+    let has_es = text.chars().any(|c| matches!(c, 'ñ' | '¿' | '¡'));
+
+    if es_hits >= 2 || (es_hits >= 1 && has_es) || has_es {
+        return Some("Spanish");
+    }
+
+    // Fallback: system locale
+    locale_language()
+}
+
+fn locale_language() -> Option<&'static str> {
+    let lang = std::env::var("LANG")
+        .or_else(|_| std::env::var("LC_ALL"))
+        .unwrap_or_default();
+
+    if lang.len() < 2 {
+        return None;
+    }
+
+    match &lang[..2] {
+        "pt" => Some("Portuguese"),
+        "es" => Some("Spanish"),
+        "fr" => Some("French"),
+        "de" => Some("German"),
+        "it" => Some("Italian"),
+        "ja" => Some("Japanese"),
+        "ko" => Some("Korean"),
+        "zh" => Some("Chinese"),
+        "ru" => Some("Russian"),
+        "ar" => Some("Arabic"),
+        _ => None,
+    }
+}
+
 fn call_claude(
     prompt: &str,
     cwd: &str,
@@ -158,6 +236,13 @@ fn call_claude(
         )
     };
 
+    let language_rule = match detect_language(prompt, conversation_context) {
+        Some(lang) if lang != "English" => format!(
+            "- CRITICAL: Write the rewritten prompt in {lang}. Do NOT default to English.\n"
+        ),
+        _ => String::new(),
+    };
+
     let instruction = format!(
         "You are a prompt refinement tool. The user submitted a vague prompt while coding in: {cwd}\n\n\
          {context_section}\
@@ -167,6 +252,7 @@ fn call_claude(
          - Output ONLY the rewritten prompt, nothing else\n\
          - Write in FIRST PERSON as the user, not about the user (use \"I\", \"my\", not \"the user\", \"they\")\n\
          - Respond in the SAME LANGUAGE as the original prompt\n\
+         {language_rule}\
          - Use the conversation history to ground your interpretation in what was actually being discussed\n\
          - If it's about a bug, reference the specific bug/file/component from the conversation\n\
          - If it's about a feature, reference the specific feature being worked on\n\
